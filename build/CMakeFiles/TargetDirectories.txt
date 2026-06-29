@@ -1,0 +1,3 @@
+D:/projects/RedWas/build/CMakeFiles/RedWas.dir
+D:/projects/RedWas/build/CMakeFiles/edit_cache.dir
+D:/projects/RedWas/build/CMakeFiles/rebuild_cache.dir
