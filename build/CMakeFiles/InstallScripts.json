@@ -1,7 +1,7 @@
 {
 	"InstallScripts" : 
 	[
-		"D:/projects/RedWas/build/cmake_install.cmake"
+		"/home/aditya/projects/RedWas/build/cmake_install.cmake"
 	],
 	"Parallel" : false
 }

@@ -8,5 +8,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(RedWas
     src/main.cpp
+    src/server/Server.cpp
 )
 
+target_include_directories(RedWas PRIVATE
+    src
+)
