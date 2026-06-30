@@ -74,31 +74,32 @@ void Server::acceptConnections() {
 }
 
 void Server::communicate(int clientFD) {
-    char buffer[1024];
+    char comBuffer[1024];
+    while(true) {
 
-    ssize_t recvBytes = recv(clientFD, buffer, sizeof(buffer),0);
+        ssize_t recvBytes = recv(clientFD, comBuffer, sizeof(comBuffer),0);
 
-    if(recvBytes==-1) {
-        cerr<<"Error occured in receiving communication.\n";
-        return;
-    } 
+        if(recvBytes==-1) {
+            cerr<<"Error occured in receiving communication.\n";
+            return;
+        } 
 
-    if(recvBytes == 0) {
-        cout<<"Client closed connection.\n";
-        return;
+        if(recvBytes == 0) {
+            cout<<"Client closed connection.\n";
+            return;
+        }
+        const char *msg = "+PONG\r\n";
+
+        ssize_t sentBytes = send(clientFD, msg, strlen(msg), 0);
+        
+        if(sentBytes == -1) {
+            cerr<<"Error occured in sending data.\n";
+            return;
+        }
+
+        cout<<"Data sent successfully.\n";
+        
     }
-    const char *msg = "+PONG\r\n";
-
-    ssize_t sentBytes = send(clientFD, msg, strlen(msg), 0);
-    
-    if(sentBytes == -1) {
-        cerr<<"Error occured in sending data.\n";
-        return;
-    }
-
-    cout<<"Data sent successfully.\n";
-    
-    return;
 }
 
 void Server::start() {
