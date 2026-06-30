@@ -10,6 +10,7 @@ class Server {
         bool bindSocket();
         bool startListening();
         void acceptConnections();
+        void communicate(int clientFD);
     public:
         void start();
 };

@@ -3,6 +3,8 @@
 #include <iostream>
 #include <netinet/in.h> //for sockaddr_in, htons, INADDR_ANY
 #include <unistd.h> //for close
+#include <cstring>
+
 using namespace std;
 
 bool Server::createSocket() {
@@ -65,9 +67,38 @@ void Server::acceptConnections() {
         }
         cout<<"Client connected successfully.\n";
         cout<<"Client FD is: "<<clientFD<<endl; //The process owns this file descriptor and should close it, when it is done communicating with the client.
+        communicate(clientFD);
         close(clientFD);
         cout<<"Client Disconnected.\n";
     }
+}
+
+void Server::communicate(int clientFD) {
+    char buffer[1024];
+
+    ssize_t recvBytes = recv(clientFD, buffer, sizeof(buffer),0);
+
+    if(recvBytes==-1) {
+        cerr<<"Error occured in receiving communication.\n";
+        return;
+    } 
+
+    if(recvBytes == 0) {
+        cout<<"Client closed connection.\n";
+        return;
+    }
+    const char *msg = "+PONG\r\n";
+
+    ssize_t sentBytes = send(clientFD, msg, strlen(msg), 0);
+    
+    if(sentBytes == -1) {
+        cerr<<"Error occured in sending data.\n";
+        return;
+    }
+
+    cout<<"Data sent successfully.\n";
+    
+    return;
 }
 
 void Server::start() {
