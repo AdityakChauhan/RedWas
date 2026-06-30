@@ -4,7 +4,7 @@
 #include <netinet/in.h> //for sockaddr_in, htons, INADDR_ANY
 #include <unistd.h> //for close
 #include <cstring>
-
+#include <thread>
 using namespace std;
 
 bool Server::createSocket() {
@@ -67,9 +67,8 @@ void Server::acceptConnections() {
         }
         cout<<"Client connected successfully.\n";
         cout<<"Client FD is: "<<clientFD<<endl; //The process owns this file descriptor and should close it, when it is done communicating with the client.
-        communicate(clientFD);
-        close(clientFD);
-        cout<<"Client Disconnected.\n";
+        thread t(&Server::communicate, this, clientFD);
+        t.detach();
     }
 }
 
@@ -81,12 +80,12 @@ void Server::communicate(int clientFD) {
 
         if(recvBytes==-1) {
             cerr<<"Error occured in receiving communication.\n";
-            return;
+            break;
         } 
 
         if(recvBytes == 0) {
             cout<<"Client closed connection.\n";
-            return;
+            break;
         }
         const char *msg = "+PONG\r\n";
 
@@ -94,12 +93,14 @@ void Server::communicate(int clientFD) {
         
         if(sentBytes == -1) {
             cerr<<"Error occured in sending data.\n";
-            return;
+            break;
         }
 
         cout<<"Data sent successfully.\n";
         
     }
+    close(clientFD);
+    cout<<"Client Disconnected.\n";
 }
 
 void Server::start() {
