@@ -5,6 +5,7 @@
 #include <unistd.h> //for close
 #include <cstring>
 #include <thread>
+#include "../resp/RespParser.h"
 using namespace std;
 
 bool Server::createSocket() {
@@ -73,6 +74,8 @@ void Server::acceptConnections() {
 }
 
 void Server::communicate(int clientFD) {
+    RespParser parser;
+
     char comBuffer[1024];
     while(true) {
 
@@ -87,8 +90,18 @@ void Server::communicate(int clientFD) {
             cout<<"Client closed connection.\n";
             break;
         }
-        const char *msg = "+PONG\r\n";
+        parser.feed(comBuffer, recvBytes);
 
+        while(parser.hasCommand()) {
+            auto args = parser.nextCommand();
+
+            for(const auto &arg: args) {
+                cout<<arg<<" ";
+            }
+            cout<<endl;
+        }
+
+        const char* msg = "+PONG\r\n";
         ssize_t sentBytes = send(clientFD, msg, strlen(msg), 0);
         
         if(sentBytes == -1) {
