@@ -6,6 +6,7 @@
 #include <cstring>
 #include <thread>
 #include "../resp/RespParser.h"
+#include "../dispatch/CommandDispatcher.h"
 using namespace std;
 
 bool Server::createSocket() {
@@ -75,10 +76,11 @@ void Server::acceptConnections() {
 
 void Server::communicate(int clientFD) {
     RespParser parser;
+    CommandDispatcher dispatcher;
 
     char comBuffer[1024];
     while(true) {
-
+        
         ssize_t recvBytes = recv(clientFD, comBuffer, sizeof(comBuffer),0);
 
         if(recvBytes==-1) {
@@ -91,7 +93,6 @@ void Server::communicate(int clientFD) {
             break;
         }
         parser.feed(comBuffer, recvBytes);
-
         while(parser.hasCommand()) {
             auto args = parser.nextCommand();
 
@@ -99,17 +100,19 @@ void Server::communicate(int clientFD) {
                 cout<<arg<<" ";
             }
             cout<<endl;
+            string response= dispatcher.dispatch(args);
+            ssize_t sentBytes = send(clientFD, response.c_str(), response.size(), 0);
+            if(sentBytes == -1) {
+                cerr<<"Error occured in sending data.\n";
+                close(clientFD);
+                cout<<"Client Disconnected.\n";
+                return;
+            }
+            else cout<<"Data sent successfully.\n";
         }
 
-        const char* msg = "+PONG\r\n";
-        ssize_t sentBytes = send(clientFD, msg, strlen(msg), 0);
         
-        if(sentBytes == -1) {
-            cerr<<"Error occured in sending data.\n";
-            break;
-        }
 
-        cout<<"Data sent successfully.\n";
         
     }
     close(clientFD);
