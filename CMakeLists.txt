@@ -12,6 +12,7 @@ add_executable(RedWas
     src/resp/RespParser.cpp
     src/serializer/RespSerializer.cpp
     src/dispatch/CommandDispatcher.cpp
+    src/store/DataStore.cpp
 )
 
 target_include_directories(RedWas PRIVATE

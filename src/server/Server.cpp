@@ -9,6 +9,8 @@
 #include "../dispatch/CommandDispatcher.h"
 using namespace std;
 
+Server::Server() : dispatcher(store) {}
+
 bool Server::createSocket() {
     lSocketFD = socket(AF_INET, SOCK_STREAM, 0); //socket is owned by the process, if process dies -> socket disappears as all fd depending on process are closed by kernel.
     if(lSocketFD == -1) {
@@ -76,7 +78,6 @@ void Server::acceptConnections() {
 
 void Server::communicate(int clientFD) {
     RespParser parser;
-    CommandDispatcher dispatcher;
 
     char comBuffer[1024];
     while(true) {
