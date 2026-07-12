@@ -20,3 +20,15 @@ string RespSerializer::integer(long long n) {
 string RespSerializer::error(const string &msg) {
     return "-ERR "+msg+"\r\n";
 }
+
+string RespSerializer::array(const vector<string>& items)
+{
+    string response = "*" + to_string(items.size()) + "\r\n";
+
+    for (const auto& item : items)
+    {
+        response += bulkString(item);
+    }
+
+    return response;
+}

@@ -85,12 +85,16 @@ CommandDispatcher::CommandDispatcher(DataStore &dataStore) : store(dataStore)
         {
             return RespSerializer::error("wrong number of arguments for 'get' command");
         }
-        auto value = store.get(command[1]);
-        if (!value)
+        auto entry = store.get(command[1]);
+        if (!entry)
         {
             return RespSerializer::nullBulk();
         }
-        return RespSerializer::bulkString(*value); // if optional<string> pass it as a * or value.value()
+        if (!holds_alternative<string>(entry->value))
+        {
+            return RespSerializer::error("WRONGTYPE Operation against a key holding the wrong kind of value");
+        }
+        return RespSerializer::bulkString(get<string>(entry->value));
     };
 
     handlers["DEL"] = [this](const vector<string> &command)
@@ -161,6 +165,111 @@ CommandDispatcher::CommandDispatcher(DataStore &dataStore) : store(dataStore)
             return RespSerializer::error("wrong number of arguments for 'persist' command");
 
         return RespSerializer::integer(store.persist(command[1]) ? 1 : 0);
+    };
+
+    handlers["RPUSH"] = [this](const vector<string> &command)
+    {
+        if (command.size() < 3)
+        {
+            return RespSerializer::error("wrong number of arguments for 'rpush' command");
+        }
+        vector<string> values;
+        for (int i = 2; i < command.size(); i++)
+        {
+            values.push_back(command[i]);
+        }
+
+        auto len = store.rpush(command[1], values);
+
+        if (!len)
+            return RespSerializer::error("WRONGTYPE Operation against a key holding the wrong kind of value");
+
+        return RespSerializer::integer(*len);
+    };
+
+    handlers["LPUSH"] = [this](const vector<string> &command)
+    {
+        if (command.size() < 3)
+        {
+            return RespSerializer::error("wrong number of arguments for 'lpush' command");
+        }
+        vector<string> values;
+        for (int i = 2; i < command.size(); i++)
+        {
+            values.push_back(command[i]);
+        }
+
+        auto len = store.lpush(command[1], values);
+
+        if (!len)
+            return RespSerializer::error("WRONGTYPE Operation against a key holding the wrong kind of value");
+
+        return RespSerializer::integer(*len);
+    };
+
+    handlers["LLEN"] = [this](const vector<string> &command)
+    {
+        if (command.size() != 2)
+        {
+            return RespSerializer::error("wrong number of arguments for 'llen' command");
+        }
+
+        auto len = store.llen(command[1]);
+
+        if (!len)
+            return RespSerializer::error("WRONGTYPE Operation against a key holding the wrong kind of value");
+
+        return RespSerializer::integer(*len);
+    };
+
+    handlers["LRANGE"] = [this](const vector<string> &command)
+    {
+        if (command.size() != 4)
+        {
+            return RespSerializer::error(
+                "wrong number of arguments for 'lrange' command");
+        }
+
+        int l, r;
+
+        try
+        {
+            l = stoi(command[2]);
+            r = stoi(command[3]);
+        }
+        catch (...)
+        {
+            return RespSerializer::error(
+                "value is not an integer or out of range");
+        }
+
+        auto range = store.lrange(command[1], l, r);
+
+        if (!range)
+        {
+            return RespSerializer::error(
+                "WRONGTYPE Operation against a key holding the wrong kind of value");
+        }
+
+        return RespSerializer::array(*range);
+    };
+
+    handlers["LPOP"] = [this](const vector<string> &command)
+    {
+        if (command.size() != 2)
+        {
+            return RespSerializer::error(
+                "wrong number of arguments for 'lpop' command");
+        }
+
+        auto value = store.lpop(command[1]);
+
+        if (!value)
+        {
+            return RespSerializer::nullBulk();
+        }
+
+        return RespSerializer::bulkString(*value);
     };
 }
 

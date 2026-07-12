@@ -7,11 +7,16 @@
 #include <chrono>
 #include <thread>
 #include <atomic>
+#include <variant> 
+#include <deque>
+#include <vector>
+
 using namespace std;
+using Value = variant<string, deque<string>>;
 
 struct Entry
 {
-    string value;
+    Value value;
     optional<chrono::steady_clock::time_point> expireAt = nullopt;
 };
 
@@ -29,7 +34,7 @@ private:
     
     void set(const string &key, const string &value, optional<chrono::steady_clock::time_point> expireAt = nullopt);
     
-    optional<string> get(const string &key);
+    Entry* get(const string &key);
     
     bool del(const string &key);
     
@@ -42,4 +47,18 @@ private:
     long long pttl(const string &key);
 
     bool persist(const string &key);
+
+    optional<size_t> rpush(const string& key, const vector<string>& values);
+    
+    optional<size_t> lpush(const string& key, const vector<string>& values);
+
+    optional<size_t> llen(const string& key);
+    
+    optional<vector<string>> lrange(const string& key,const int &l,const int &r);
+
+    optional<string> lpop(const string& key);
+
+    optional<vector<string>> lpop(const string& key, size_t count);
+
+    optional<string> rpop(const string& key);
 };

@@ -10,4 +10,5 @@ class RespSerializer {
         static string nullBulk();
         static string integer(long long n);
         static string error(const string &msg);
+        static string array(const vector<string>& items);
 };
