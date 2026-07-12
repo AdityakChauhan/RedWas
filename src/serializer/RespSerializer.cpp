@@ -13,6 +13,10 @@ string RespSerializer::nullBulk() {
     return "$-1\r\n";
 }
 
+string RespSerializer::nullArray() {
+    return "*-1\r\n";
+}
+
 string RespSerializer::integer(long long n) {
     return ":"+to_string(n)+"\r\n";
 }
