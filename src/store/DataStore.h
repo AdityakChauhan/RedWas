@@ -1,19 +1,49 @@
 #pragma once
 
-#include <unordered_map>
-#include <string>
-#include <shared_mutex>
-#include <optional>
-#include <chrono>
-#include <thread>
 #include <atomic>
-#include <variant>
-#include <deque>
-#include <vector>
+#include <chrono>
 #include <condition_variable>
+#include <cstdint>
+#include <deque>
+#include <map>
+#include <optional>
+#include <shared_mutex>
+#include <string>
+#include <thread>
+#include <unordered_map>
+#include <utility>
+#include <variant>
+#include <vector>
 
 using namespace std;
-using Value = variant<string, deque<string>>;
+
+struct StreamID
+{
+    uint64_t milliseconds = 0;
+    uint64_t sequence = 0;
+
+    bool operator<(const StreamID &other) const
+    {
+        if (milliseconds != other.milliseconds)
+        {
+            return milliseconds < other.milliseconds;
+        }
+        return sequence < other.sequence;
+    }
+
+    bool operator==(const StreamID &other) const
+    {
+        return milliseconds == other.milliseconds && sequence == other.sequence;
+    }
+};
+
+struct Stream
+{
+    map<StreamID, unordered_map<string, string>> entries;
+    optional<StreamID> lastId = nullopt;
+};
+
+using Value = variant<string, deque<string>, Stream>;
 
 struct Entry
 {
@@ -42,18 +72,55 @@ struct BlockingPopResult
     string value;
 };
 
+struct StreamEntry
+{
+    StreamID id;
+    unordered_map<string, string> fields;
+};
+
+struct XAddResult
+{
+    bool wrongType = false;
+    bool invalidId = false;
+    bool notGreater = false;
+    string id;
+};
+
+struct StreamRangeResult
+{
+    bool wrongType = false;
+    bool invalidId = false;
+    vector<StreamEntry> entries;
+};
+
+struct StreamReadStream
+{
+    string key;
+    vector<StreamEntry> entries;
+};
+
+struct StreamReadResult
+{
+    bool wrongType = false;
+    bool invalidId = false;
+    bool timedOut = false;
+    vector<StreamReadStream> streams;
+};
+
 class DataStore
 {
 private:
     unordered_map<string, Entry> store;
     mutable shared_mutex mutex;
     condition_variable_any listCv;
+    condition_variable_any streamCv;
     thread cleanupThread;
     atomic<bool> stopCleanup = false;
 
     void cleanupExpiredKeys();
     unordered_map<string, Entry>::iterator findValidIterator(const string &key);
     BlockingPopResult blockingPop(const vector<string> &keys, chrono::milliseconds timeout, bool fromLeft);
+    StreamReadResult readStreams(const vector<pair<string, string>> &requests, bool resolveDollarIds);
 
 public:
     DataStore();
@@ -100,4 +167,13 @@ public:
     BlockingPopResult blpop(const vector<string> &keys, chrono::milliseconds timeout);
 
     BlockingPopResult brpop(const vector<string> &keys, chrono::milliseconds timeout);
+
+    XAddResult xadd(const string &key, const string &idSpec, const vector<pair<string, string>> &fields);
+
+    optional<size_t> xlen(const string &key);
+
+    StreamRangeResult xrange(const string &key, const string &start, const string &end, optional<size_t> count, bool reverse);
+
+    StreamReadResult xread(const vector<pair<string, string>> &requests, optional<chrono::milliseconds> blockTimeout);
 };
+

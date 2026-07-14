@@ -71,6 +71,41 @@ vector<string> tailValues(const vector<string> &command, size_t start)
 {
     return vector<string>(command.begin() + start, command.end());
 }
+string encodeStreamEntry(const StreamEntry &entry)
+{
+    vector<string> fieldItems;
+    for (const auto &field : entry.fields)
+    {
+        fieldItems.push_back(RespSerializer::bulkString(field.first));
+        fieldItems.push_back(RespSerializer::bulkString(field.second));
+    }
+
+    return RespSerializer::rawArray({
+        RespSerializer::bulkString(to_string(entry.id.milliseconds) + "-" + to_string(entry.id.sequence)),
+        RespSerializer::rawArray(fieldItems)});
+}
+
+string encodeStreamEntries(const vector<StreamEntry> &entries)
+{
+    vector<string> encodedEntries;
+    for (const auto &entry : entries)
+    {
+        encodedEntries.push_back(encodeStreamEntry(entry));
+    }
+    return RespSerializer::rawArray(encodedEntries);
+}
+
+string encodeStreamReadResult(const StreamReadResult &result)
+{
+    vector<string> streams;
+    for (const auto &stream : result.streams)
+    {
+        streams.push_back(RespSerializer::rawArray({
+            RespSerializer::bulkString(stream.key),
+            encodeStreamEntries(stream.entries)}));
+    }
+    return RespSerializer::rawArray(streams);
+}
 }
 
 CommandDispatcher::CommandDispatcher(DataStore &dataStore) : store(dataStore)
@@ -515,6 +550,185 @@ CommandDispatcher::CommandDispatcher(DataStore &dataStore) : store(dataStore)
 
         return RespSerializer::array({result.key, result.value});
     };
+    handlers["XADD"] = [this](const vector<string> &command)
+    {
+        if (command.size() < 5 || command.size() % 2 == 0)
+        {
+            return RespSerializer::error("wrong number of arguments for 'xadd' command");
+        }
+
+        vector<pair<string, string>> fields;
+        for (size_t i = 3; i < command.size(); i += 2)
+        {
+            fields.push_back({command[i], command[i + 1]});
+        }
+
+        auto result = store.xadd(command[1], command[2], fields);
+        if (result.wrongType)
+        {
+            return RespSerializer::error(WRONG_TYPE);
+        }
+        if (result.invalidId)
+        {
+            return RespSerializer::error("Invalid stream ID specified as stream command argument");
+        }
+        if (result.notGreater)
+        {
+            return RespSerializer::error("The ID specified in XADD is equal or smaller than the target stream top item");
+        }
+
+        return RespSerializer::bulkString(result.id);
+    };
+
+    handlers["XLEN"] = [this](const vector<string> &command)
+    {
+        if (command.size() != 2)
+        {
+            return RespSerializer::error("wrong number of arguments for 'xlen' command");
+        }
+
+        auto len = store.xlen(command[1]);
+        if (!len)
+        {
+            return RespSerializer::error(WRONG_TYPE);
+        }
+
+        return RespSerializer::integer(*len);
+    };
+
+    auto rangeHandler = [this](const vector<string> &command, bool reverse)
+    {
+        string commandName = reverse ? "xrevrange" : "xrange";
+        if (command.size() != 4 && command.size() != 6)
+        {
+            return RespSerializer::error("wrong number of arguments for '" + commandName + "' command");
+        }
+
+        optional<size_t> count = nullopt;
+        if (command.size() == 6)
+        {
+            string option = command[4];
+            transform(option.begin(), option.end(), option.begin(),
+                      [](unsigned char c)
+                      {
+                          return toupper(c);
+                      });
+            if (option != "COUNT")
+            {
+                return RespSerializer::error("syntax error");
+            }
+
+            count = parseCount(command[5]);
+            if (!count)
+            {
+                return RespSerializer::error("value is not an integer or out of range");
+            }
+        }
+
+        auto result = reverse
+                          ? store.xrange(command[1], command[3], command[2], count, true)
+                          : store.xrange(command[1], command[2], command[3], count, false);
+        if (result.wrongType)
+        {
+            return RespSerializer::error(WRONG_TYPE);
+        }
+        if (result.invalidId)
+        {
+            return RespSerializer::error("Invalid stream ID specified as stream command argument");
+        }
+
+        return encodeStreamEntries(result.entries);
+    };
+
+    handlers["XRANGE"] = [rangeHandler](const vector<string> &command)
+    {
+        return rangeHandler(command, false);
+    };
+
+    handlers["XREVRANGE"] = [rangeHandler](const vector<string> &command)
+    {
+        return rangeHandler(command, true);
+    };
+
+    handlers["XREAD"] = [this](const vector<string> &command)
+    {
+        if (command.size() < 4)
+        {
+            return RespSerializer::error("wrong number of arguments for 'xread' command");
+        }
+
+        size_t pos = 1;
+        optional<chrono::milliseconds> blockTimeout = nullopt;
+
+        while (pos < command.size())
+        {
+            string option = command[pos];
+            transform(option.begin(), option.end(), option.begin(),
+                      [](unsigned char c)
+                      {
+                          return toupper(c);
+                      });
+
+            if (option == "BLOCK")
+            {
+                if (pos + 1 >= command.size())
+                {
+                    return RespSerializer::error("syntax error");
+                }
+
+                auto timeout = parseCount(command[pos + 1]);
+                if (!timeout)
+                {
+                    return RespSerializer::error("timeout is not an integer or out of range");
+                }
+                blockTimeout = chrono::milliseconds(*timeout);
+                pos += 2;
+            }
+            else if (option == "STREAMS")
+            {
+                pos++;
+                break;
+            }
+            else
+            {
+                return RespSerializer::error("syntax error");
+            }
+        }
+
+        if (pos >= command.size())
+        {
+            return RespSerializer::error("syntax error");
+        }
+
+        size_t remaining = command.size() - pos;
+        if (remaining == 0 || remaining % 2 != 0)
+        {
+            return RespSerializer::error("syntax error");
+        }
+
+        size_t streamCount = remaining / 2;
+        vector<pair<string, string>> requests;
+        for (size_t i = 0; i < streamCount; i++)
+        {
+            requests.push_back({command[pos + i], command[pos + streamCount + i]});
+        }
+
+        auto result = store.xread(requests, blockTimeout);
+        if (result.wrongType)
+        {
+            return RespSerializer::error(WRONG_TYPE);
+        }
+        if (result.invalidId)
+        {
+            return RespSerializer::error("Invalid stream ID specified as stream command argument");
+        }
+        if (result.timedOut || result.streams.empty())
+        {
+            return RespSerializer::nullArray();
+        }
+
+        return encodeStreamReadResult(result);
+    };
 }
 
 string CommandDispatcher::dispatch(const vector<string> &command)
@@ -538,5 +752,8 @@ string CommandDispatcher::dispatch(const vector<string> &command)
 
     return it->second(command);
 }
+
+
+
 
 

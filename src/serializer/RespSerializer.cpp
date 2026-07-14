@@ -36,3 +36,15 @@ string RespSerializer::array(const vector<string>& items)
 
     return response;
 }
+
+string RespSerializer::rawArray(const vector<string>& encodedItems)
+{
+    string response = "*" + to_string(encodedItems.size()) + "\r\n";
+
+    for (const auto& item : encodedItems)
+    {
+        response += item;
+    }
+
+    return response;
+}

@@ -13,4 +13,6 @@ class RespSerializer {
         static string integer(long long n);
         static string error(const string &msg);
         static string array(const vector<string>& items);
+        static string rawArray(const vector<string>& encodedItems);
 };
+
